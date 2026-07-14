@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>世界书检索器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #1a1a2e; color: #e0e0e0; display: flex; height: 100vh; overflow: hidden; }
+
+/* 上传界面 */
+#upload-screen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #1a1a2e; z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+#upload-screen.hidden { display: none; }
+#upload-screen .icon { font-size: 64px; margin-bottom: 20px; }
+#upload-screen h2 { font-size: 22px; color: #e0e0e0; margin-bottom: 8px; }
+#upload-screen p { font-size: 14px; color: #888; line-height: 1.8; }
+#upload-screen .btn { display: inline-block; margin-top: 24px; padding: 14px 36px; background: #e94560; color: #fff; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+#upload-screen .btn:active { background: #d63850; }
+#upload-screen .cache-info { margin-top: 20px; font-size: 13px; color: #666; }
+#upload-screen .cache-info a { color: #7ec8e3; cursor: pointer; text-decoration: underline; }
+
+/* 侧边栏 */
+#sidebar { width: 300px; min-width: 300px; background: #16213e; display: flex; flex-direction: column; border-right: 1px solid #0f3460; }
+#sidebar-header { padding: 16px; border-bottom: 1px solid #0f3460; }
+#sidebar-header h1 { font-size: 18px; color: #e94560; margin-bottom: 4px; }
+#sidebar-header .stats { font-size: 12px; color: #888; }
+#sidebar-header .stats a { color: #7ec8e3; cursor: pointer; text-decoration: underline; margin-left: 8px; }
+
+#search-box { padding: 12px 16px; }
+#search-box input { width: 100%; padding: 10px 12px; border: 1px solid #0f3460; border-radius: 6px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; outline: none; }
+#search-box input:focus { border-color: #e94560; }
+#search-box .hint { font-size: 11px; color: #666; margin-top: 6px; }
+
+#cat-filters { flex: 1; overflow-y: auto; padding: 8px 16px; }
+#cat-filters h3 { font-size: 12px; color: #888; margin-bottom: 8px; letter-spacing: 1px; }
+.cat-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; margin: 2px; border-radius: 14px; font-size: 12px; cursor: pointer; border: 1px solid #0f3460; background: transparent; color: #aaa; user-select: none; }
+.cat-chip.active { background: #e94560; border-color: #e94560; color: #fff; }
+.cat-chip .count { font-size: 10px; opacity: .7; }
+
+/* 主区域 */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#topbar { padding: 12px 20px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+#topbar .result-info { font-size: 13px; color: #aaa; }
+#topbar .result-info span { color: #e94560; font-weight: bold; }
+#topbar button { padding: 6px 14px; border: 1px solid #0f3460; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; font-size: 12px; }
+
+/* 结果卡片 */
+#results { flex: 1; overflow-y: auto; padding: 12px 20px; }
+#results .empty { text-align: center; color: #666; padding: 60px 0; font-size: 14px; }
+
+.card { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; }
+.card:active { border-color: #7ec8e3; }
+.card.expanded { border-color: #e94560; }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.card-title { font-size: 14px; font-weight: 600; color: #e0e0e0; flex: 1; word-break: break-all; }
+.card-meta { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.card-cat { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #0f3460; color: #7ec8e3; white-space: nowrap; }
+.card-keys { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.card-key { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1a1a2e; color: #888; border: 1px solid #0f3460; }
+.card-preview { display: none; font-size: 12px; color: #999; margin-top: 8px; line-height: 1.6; }
+.card.expanded .card-preview { display: block; }
+.card-full { display: none; font-size: 12px; color: #ccc; margin-top: 8px; line-height: 1.8; white-space: pre-line; border-top: 1px solid #0f3460; padding-top: 8px; }
+.card.expanded .card-full { display: block; }
+.card-actions { display: flex; gap: 6px; margin-top: 8px; }
+.card-actions button { padding: 8px 14px; font-size: 12px; border: 1px solid #0f3460; border-radius: 4px; background: transparent; color: #aaa; cursor: pointer; }
+.card-actions button.copy-title-btn { border-color: #e94560; color: #e94560; font-weight: 600; }
+.card-actions button:active { background: #0f3460; }
+
+.highlight { background: #e94560; color: #fff; padding: 0 2px; border-radius: 2px; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+
+/* Toast */
+#toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 24px; border-radius: 20px; font-size: 13px; z-index: 1000; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#toast.show { opacity: 1; }
+
+/* 折叠按钮（仅手机端显示） */
+#filter-toggle { display: none; background: none; border: 1px solid #0f3460; color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+#filter-toggle:active { background: #0f3460; }
+#filter-toggle .arrow { display: inline-block; transition: transform .2s; margin-left: 2px; }
+#filter-toggle.open .arrow { transform: rotate(180deg); }
+
+/* 激活筛选标签 */
+#active-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; align-items: center; min-height: 0; }
+#active-filters:empty { padding: 0; }
+.filter-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 14px; font-size: 11px; background: rgba(233,69,96,.15); color: #e94560; border: 1px solid rgba(233,69,96,.3); }
+.filter-tag .remove { cursor: pointer; font-size: 14px; line-height: 1; opacity: .7; }
+.filter-tag .remove:active { opacity: 1; }
+
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  #filter-toggle { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* 侧边栏变为顶部面板 */
+  #sidebar { width: 100%; min-width: 100%; max-height: none; background: #16213e; border-right: none; border-bottom: 1px solid #0f3460; flex-shrink: 0; z-index: 10; }
+
+  /* 头部：标题 + 按钮行 */
+  #sidebar-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: none; }
+  #sidebar-header h1 { font-size: 15px; margin-bottom: 0; }
+  #sidebar-header .stats { font-size: 11px; white-space: nowrap; }
+
+  /* 搜索栏 */
+  #search-box { padding: 0 14px 10px; }
+  #search-box input { padding: 10px 12px; font-size: 15px; border-radius: 8px; }
+  #search-box .hint { display: none; }
+
+  /* 分类面板：默认折叠 */
+  #cat-filters { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 14px; }
+  #cat-filters.open { max-height: 220px; overflow-y: auto; padding: 0 14px 8px; }
+  #cat-filters h3 { display: none; }
+  .cat-chip { padding: 6px 12px; font-size: 12px; margin: 3px; border-radius: 16px; }
+
+  /* 主区域 */
+  #main { flex: 1; height: auto; }
+  #topbar { padding: 8px 14px; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid #0f3460; }
+  #topbar .result-info { font-size: 12px; }
+
+  /* 激活筛选标签放到 topbar 内 */
+  #active-filters { padding: 2px 0; }
+
+  /* 结果列表 */
+  #results { padding: 8px 10px; }
+  .card { padding: 10px 12px; margin-bottom: 8px; border-radius: 10px; }
+  .card-title { font-size: 13px; }
+  .card-key { font-size: 11px; padding: 3px 8px; }
+  .card-preview { font-size: 11px; }
+  .card-full { font-size: 11px; }
+  .card-actions button { padding: 8px 14px; font-size: 12px; border-radius: 6px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 上传界面 -->
+<div id="upload-screen">
+  <div class="icon">📂</div>
+  <h2>选择世界书 JSON</h2>
+  <p>首次使用需要加载世界书文件<br>之后会自动缓存，无需重复上传</p>
+  <button class="btn" id="upload-btn">选择 JSON 文件</button>
+  <input type="file" id="file-input" accept=".json" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
+  <div class="cache-info" id="loading-hint" style="display:none;margin-top:16px;color:#7ec8e3;font-size:13px;">⏳ 正在解析文件...</div>
+  <div class="cache-info" id="cache-info" style="display:none">
+    已有缓存：<span id="cache-count">0</span> 条<br>
+    <a onclick="useCache()">使用缓存数据</a> · <a onclick="document.getElementById('upload-btn').click()">重新上传</a>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <div style="flex:1;min-width:0">
+      <h1>🔍 世界书检索器</h1>
+      <div class="stats"><span id="total-count">0</span> 条 · <a onclick="backToUpload()">换文件</a></div>
+    </div>
+    <button id="filter-toggle" onclick="toggleFilter()">筛选 <span class="arrow">▾</span></button>
+  </div>
+  <div id="search-box">
+    <input type="text" id="search-input" placeholder="搜索条目名 / 关键词..." autofocus disabled>
+    <div class="hint">搜索 → 点条目复制标题 → 到酒馆粘贴</div>
+  </div>
+  <div id="cat-filters">
+    <h3>分类筛选</h3>
+    <div id="cat-chips"></div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="topbar">
+    <div class="result-info">显示 <span id="match-count">0</span> 条</div>
+    <div id="active-filters"></div>
+    <button onclick="clearAll()">清除</button>
+  </div>
+  <div id="results">
+    <div class="empty">← 选择 JSON 文件开始</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+var ENTRIES = [];
+var CAT_DEFS = {
+  "A":"世界观-世界","B":"世界观-设定","C":"世界观-地点",
+  "D":"角色-特质","E":"角色-身份","F":"角色-职业",
+  "G":"角色-幻想","H":"角色-关系","I":"角色-能力",
+  "J":"恋物-服饰","K":"恋物-身体","L":"恋物-感官","M":"恋物-物品",
+  "N":"剧情-性爱","O":"剧情-NTR","P":"剧情-行为","Q":"剧情-事件",
+  "R":"剧情-变化","S":"剧情-幻想",
+  "T":"SM-痛苦","U":"SM-耻辱","V":"SM-物化"
+};
+var CAT_ORDER = "ABCDEFGHIJKLMNOPQRSTUV";
+var activeCat = "__ALL__";
+
+// ====== IndexedDB ======
+var DB_NAME = "wb-searcher-v2";
+var STORE = "entries";
+
+function idb(op) {
+  return new Promise(function(ok, err) {
+    var req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = function(e) { e.target.result.createObjectStore(STORE, {keyPath: "uid"}); };
+    req.onsuccess = function(e) { var db = e.target.result; op(db).then(ok).catch(err).finally(function() { db.close(); }); };
+    req.onerror = function(e) { err(e.target.error); };
+  });
+}
+
+function loadCache() {
+  return idb(function(db) {
+    return new Promise(function(ok) {
+      var tx = db.transaction(STORE, "readonly");
+      var req = tx.objectStore(STORE).getAll();
+      req.onsuccess = function() { ok(req.result.length ? req.result : null); };
+    });
+  });
+}
+
+function saveCache(entries) {
+  return idb(function(db) {
+    return new Promise(function(ok) {
+      var tx = db.transaction(STORE, "readwrite");
+      var store = tx.objectStore(STORE);
+      store.clear();
+      entries.forEach(function(e) { store.put(e); });
+      tx.oncomplete = function() { ok(); };
+    });
+  });
+}
+
+// ====== JSON 解析 ======
+function parseWorldbook(data) {
+  var raw = data.entries;
+  if (!raw) throw new Error("缺少 entries 字段");
+  var list = Array.isArray(raw) ? raw : Object.values(raw);
+  return list.map(function(v) {
+    var comment = v.comment || "";
+    var cat = (comment.split("-")[0] || "?").replace(/[^A-Z]/g, "") || "?";
+    return {
+      uid: v.uid || 0,
+      comment: comment,
+      keys: v.key || [],
+      content: v.content || "",
+      cat: cat
+    };
+  }).sort(function(a, b) { return a.uid - b.uid; });
+}
+
+// ====== UI 状态 ======
+function showUpload() {
+  document.getElementById("upload-screen").classList.remove("hidden");
+  document.getElementById("search-input").disabled = true;
+}
+
+function showApp(entries, source) {
+  ENTRIES = entries;
+  document.getElementById("upload-screen").classList.add("hidden");
+  document.getElementById("total-count").textContent = entries.length;
+  document.getElementById("search-input").disabled = false;
+  document.getElementById("search-input").focus();
+  initChips();
+  filterAndRender();
+}
+
+function backToUpload() {
+  ENTRIES = [];
+  document.getElementById("total-count").textContent = "0";
+  document.getElementById("match-count").textContent = "0";
+  document.getElementById("results").innerHTML = '<div class="empty">← 选择 JSON 文件开始</div>';
+  document.getElementById("cat-chips").innerHTML = "";
+  showUpload();
+  // 重新检查缓存
+  loadCache().then(function(cached) {
+    if (cached) {
+      document.getElementById("cache-count").textContent = cached.length;
+      document.getElementById("cache-info").style.display = "block";
+    }
+  });
+}
+
+// ====== 初始化 ======
+function init() {
+  loadCache().then(function(cached) {
+    if (cached) {
+      document.getElementById("cache-count").textContent = cached.length;
+      document.getElementById("cache-info").style.display = "block";
+    }
+  });
+
+  // 文件上传：按钮手动触发 input（避免移动端 label 嵌套 display:none input 的 change 不触发 bug）
+  document.getElementById("upload-btn").addEventListener("click", function() {
+    document.getElementById("file-input").click();
+  });
+  document.getElementById("file-input").addEventListener("change", function(e) {
+    if (e.target.files.length > 0) loadFile(e.target.files[0]);
+    // 重置以便同文件可重复选
+    e.target.value = "";
+  });
+
+  // 搜索
+  var debounce;
+  document.getElementById("search-input").addEventListener("input", function() {
+    clearTimeout(debounce);
+    var self = this;
+    debounce = setTimeout(function() { searchTerm = self.value; filterAndRender(); }, 150);
+  });
+
+  // 快捷键
+  document.addEventListener("keydown", function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      e.preventDefault();
+      document.getElementById("search-input").focus();
+    }
+    if (e.key === "Escape") { clearAll(); document.getElementById("search-input").focus(); }
+  });
+}
+
+function useCache() {
+  loadCache().then(function(cached) {
+    if (cached) showApp(cached);
+  });
+}
+
+function loadFile(file) {
+  if (!file.name.endsWith(".json")) { toast("⚠️ 请选择 .json 文件"); return; }
+  document.getElementById("loading-hint").style.display = "block";
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      var entries = parseWorldbook(data);
+      saveCache(entries).then(function() {
+        document.getElementById("loading-hint").style.display = "none";
+        showApp(entries);
+        toast("✅ 已加载 " + entries.length + " 条 · 已缓存");
+      }).catch(function() {
+        // 缓存失败不影响使用
+        document.getElementById("loading-hint").style.display = "none";
+        showApp(entries);
+        toast("✅ 已加载 " + entries.length + " 条（缓存失败）");
+      });
+    } catch(err) {
+      document.getElementById("loading-hint").style.display = "none";
+      toast("❌ 解析失败: " + err.message);
+    }
+  };
+  reader.onerror = function() {
+    document.getElementById("loading-hint").style.display = "none";
+    toast("❌ 文件读取失败，请重试");
+  };
+  reader.readAsText(file);
+}
+
+// ====== 分类 ======
+function initChips() {
+  var container = document.getElementById("cat-chips");
+  var counts = {};
+  ENTRIES.forEach(function(e) { counts[e.cat] = (counts[e.cat]||0) + 1; });
+  container.innerHTML = "";
+  var all = chip("全部(" + ENTRIES.length + ")", "__ALL__", true);
+  container.appendChild(all);
+  CAT_ORDER.split("").forEach(function(c) {
+    if (!counts[c]) return;
+    container.appendChild(chip(c + " " + (CAT_DEFS[c]||c) + "(" + counts[c] + ")", c, false));
+  });
+}
+
+function chip(label, cat, active) {
+  var el = document.createElement("span");
+  el.className = "cat-chip" + (active ? " active" : "");
+  el.textContent = label;
+  el.onclick = function() { toggleCat(cat, el); };
+  return el;
+}
+
+function toggleCat(cat, el) {
+  document.querySelectorAll(".cat-chip").forEach(function(c) { c.classList.remove("active"); });
+  el.classList.add("active");
+  activeCat = cat === "__ALL__" ? "__ALL__" : cat;
+  filterAndRender();
+}
+
+// ====== 搜索 ======
+var searchTerm = "";
+function tokenize(s) { return s.toLowerCase().trim().split(/\s+/).filter(Boolean); }
+function matchesSearch(e, tokens) {
+  if (!tokens.length) return true;
+  var h = [e.comment].concat(e.keys).join(" ").toLowerCase();
+  return tokens.every(function(t) { return h.indexOf(t) !== -1; });
+}
+
+function filterAndRender() {
+  updateActiveFilters();
+  var tokens = tokenize(searchTerm);
+  var filtered = ENTRIES;
+  if (activeCat !== "__ALL__") filtered = filtered.filter(function(e) { return e.cat === activeCat; });
+  if (tokens.length) filtered = filtered.filter(function(e) { return matchesSearch(e, tokens); });
+  document.getElementById("match-count").textContent = filtered.length;
+  render(filtered, tokens);
+}
+
+// ====== 渲染 ======
+function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function hl(text, tokens) {
+  if (!tokens || !tokens.length) return text;
+  var r = text;
+  tokens.forEach(function(t) { r = r.replace(new RegExp("(" + esc(t) + ")", "gi"), '<mark class="highlight">$1</mark>'); });
+  return r;
+}
+
+function render(entries, tokens) {
+  var c = document.getElementById("results");
+  if (!ENTRIES.length) { c.innerHTML = '<div class="empty">← 选择 JSON 文件开始</div>'; return; }
+  if (!entries.length) { c.innerHTML = '<div class="empty">没有匹配的条目 (´・ω・`)</div>'; return; }
+  c.innerHTML = entries.map(function(e) {
+    var preview = e.content.replace(/<[^>]+>/g, "").substring(0, 150);
+    var keysHtml = e.keys.slice(0, 8).map(function(k) { return '<span class="card-key">' + hl(k, tokens) + '</span>'; }).join("");
+    return '<div class="card" id="c' + e.uid + '" onclick="toggle(' + e.uid + ')">' +
+      '<div class="card-header">' +
+        '<div class="card-title">' + hl(e.comment, tokens) + '</div>' +
+        '<span class="card-cat">' + e.cat + '</span>' +
+      '</div>' +
+      '<div class="card-keys">' + keysHtml + '</div>' +
+      '<div class="card-preview">' + hl(preview, tokens) + '</div>' +
+      '<div class="card-full">' + hl(e.content, tokens) + '</div>' +
+      '<div class="card-actions">' +
+        '<button class="copy-title-btn" onclick="event.stopPropagation();copyTitle(' + e.uid + ')">📝 复制标题</button>' +
+        '<button onclick="event.stopPropagation();copyContent(' + e.uid + ')">📋 复制内容</button>' +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+
+function toggle(uid) {
+  var card = document.getElementById("c" + uid);
+  if (!card) return;
+  // 收起其他展开的卡
+  document.querySelectorAll(".card.expanded").forEach(function(c) {
+    if (c !== card) c.classList.remove("expanded");
+  });
+  card.classList.toggle("expanded");
+  if (card.classList.contains("expanded")) {
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+// ====== 复制 ======
+function get(uid) { return ENTRIES.find(function(e) { return e.uid === uid; }); }
+
+function copyTitle(uid) {
+  var e = get(uid);
+  if (e) { copy(e.comment); toast("已复制: " + e.comment); }
+}
+function copyContent(uid) {
+  var e = get(uid);
+  if (e) { copy(e.content); toast("已复制内容"); }
+}
+function copy(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(function() { fallbackCopy(text); });
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;opacity:0";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+}
+
+function clearAll() {
+  document.getElementById("search-input").value = "";
+  searchTerm = "";
+  activeCat = "__ALL__";
+  initChips();
+  filterAndRender();
+}
+
+// 手机端：分类面板折叠
+function toggleFilter() {
+  var panel = document.getElementById("cat-filters");
+  var btn = document.getElementById("filter-toggle");
+  panel.classList.toggle("open");
+  btn.classList.toggle("open");
+}
+
+// 更新激活筛选标签
+function updateActiveFilters() {
+  var container = document.getElementById("active-filters");
+  if (!container) return;
+  var tags = [];
+  if (searchTerm) {
+    tags.push('<span class="filter-tag">🔍 ' + searchTerm + ' <span class="remove" onclick="event.stopPropagation();clearSearch()">×</span></span>');
+  }
+  if (activeCat !== "__ALL__") {
+    var def = CAT_DEFS[activeCat] || activeCat;
+    tags.push('<span class="filter-tag">' + activeCat + ' ' + def + ' <span class="remove" onclick="event.stopPropagation();clearCat()">×</span></span>');
+  }
+  container.innerHTML = tags.join("");
+}
+
+function clearSearch() {
+  document.getElementById("search-input").value = "";
+  searchTerm = "";
+  filterAndRender();
+  document.getElementById("search-input").focus();
+}
+
+function clearCat() {
+  activeCat = "__ALL__";
+  initChips();
+  filterAndRender();
+}
+
+function toast(msg) {
+  var el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(el._t);
+  el._t = setTimeout(function() { el.classList.remove("show"); }, 2000);
+}
+
+// ====== 启动 ======
+init();
+</script>
+</body>
+</html>
